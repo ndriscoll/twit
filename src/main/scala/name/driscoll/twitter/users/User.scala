@@ -1,9 +1,9 @@
-package dev.zio.quickstart.users
+package name.driscoll.twitter.users
 
 import java.util.UUID
 import zio.json.*
 
-case class User(name: String, age: Int)
+case class User(name: String)
 
 object User:
   given JsonEncoder[User] =

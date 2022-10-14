@@ -1,4 +1,4 @@
-package dev.zio.quickstart.users
+package name.driscoll.twitter.users
 
 import zhttp.http.*
 import zio.*

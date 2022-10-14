@@ -1,0 +1,12 @@
+services:
+  database:
+    image: postgres
+    command: postgres -c config_file=/etc/postgresql.conf
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/postgres/my-postgres.conf:/etc/postgresql.conf
+      - ./docker/postgres/schema:/docker-entrypoint-initdb.d
+    shm_size: 2048MB
+    environment:
+      POSTGRES_PASSWORD: password

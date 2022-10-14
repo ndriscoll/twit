@@ -1,4 +1,5 @@
-package dev.zio.quickstart.users
+package name.driscoll.twitter.users
+
 import zio.*
 
 import scala.collection.mutable

@@ -1,4 +1,4 @@
-package dev.zio.quickstart.users
+package name.driscoll.twitter.users
 
 import io.getquill.context.ZioJdbc.DataSourceLayer
 import io.getquill.{Escape, H2ZioJdbcContext}
@@ -9,20 +9,21 @@ import zio.*
 import java.util.UUID
 import javax.sql.DataSource
 
-case class UserTable(uuid: UUID, name: String, age: Int)
+case class Users(id: Long, name: String)
 
 case class PersistentUserRepo(ds: DataSource) extends UserRepo:
-  val ctx = new H2ZioJdbcContext(Escape)
+  val ctx = new PostgresZioJdbcContext(SnakeCase)
 
   import ctx._
+//  inline private implicit def userSchemaMeta: SchemaMeta[UserTable] = schemaMeta[UserTable]("users")
 
   override def register(user: User): Task[String] = {
     for
-      id <- Random.nextUUID
+      id <- Random.nextLong
       _ <- ctx.run {
         quote {
-          query[UserTable].insertValue {
-            lift(UserTable(id, user.name, user.age))
+          query[Users].insertValue {
+            lift(Users(id, user.name))
           }
         }
       }
@@ -32,16 +33,16 @@ case class PersistentUserRepo(ds: DataSource) extends UserRepo:
   override def lookup(id: String): Task[Option[User]] =
     ctx.run {
       quote {
-        query[UserTable]
-          .filter(p => p.uuid == lift(UUID.fromString(id)))
-          .map(u => User(u.name, u.age))
+        query[Users]
+          .filter(p => p.id == lift(id.toLong))
+          .map(u => User(u.name))
       }
     }.provide(ZLayer.succeed(ds)).map(_.headOption)
 
   override def users: Task[List[User]] =
     ctx.run {
       quote {
-        query[UserTable].map(u => User(u.name, u.age))
+        query[Users].map(u => User(u.name))
       }
     }.provide(ZLayer.succeed(ds))
 
