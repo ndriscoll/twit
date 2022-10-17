@@ -12,4 +12,4 @@ trait TweetRepo:
 
 
 object TweetRepo:
-  def persistent: ZLayer[Any, Throwable, TweetRepo] = Quill.DataSource.fromPrefix("TweetApp") >>> ZLayer.fromFunction(PersistentTweetRepo(_))
+  def persistent: ZLayer[Any, Throwable, TweetRepo] = PersistentTweetRepo.layer
