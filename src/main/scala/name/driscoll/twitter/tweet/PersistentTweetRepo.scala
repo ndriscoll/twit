@@ -7,7 +7,7 @@ import io.getquill.*
 import name.driscoll.twitter.MainApp.Environment
 import name.driscoll.twitter.users.{User, Users}
 import zio.*
-import zio.stream.{ZSink, ZStream}
+import zio.stream._
 
 import java.time.Instant
 import java.util.UUID
@@ -16,7 +16,7 @@ import javax.sql.DataSource
 case class Tweets(id: Long, authorId: Long, body: String, createdAt: Instant)
 case class InsertRequest(body: String, rspP: Promise[Throwable, Long])
 
-case class PersistentTweetRepo(createQueue: Queue[InsertRequest], ds: DataSource) extends TweetRepo:
+case class PersistentTweetRepo(createQueue: Queue[InsertRequest], ds: DataSource, clock: Clock) extends TweetRepo:
   val ctx = new PostgresZioJdbcContext(SnakeCase)
 
   import ctx._
@@ -39,7 +39,7 @@ case class PersistentTweetRepo(createQueue: Queue[InsertRequest], ds: DataSource
   def createChunk(chunk: Chunk[InsertRequest]): Task[Unit] = {
     val authorId = 1L // TODO: Pull this out of a jwt and include it in the InsertRequest
     for
-      _ <- ZIO.logInfo(s"Processing ${chunk.size}")
+      start <- clock.instant
       ids <- ctx.run {
         quote {
           liftQuery(chunk.map(_.body)).foreach { r =>
@@ -48,6 +48,8 @@ case class PersistentTweetRepo(createQueue: Queue[InsertRequest], ds: DataSource
           }
         }}
       _ <- ZStream.fromChunk(chunk).zip(ZStream.fromIterable(ids)).runForeach(_.rspP.succeed(_))
+      finish <- clock.instant
+      _ <- ZIO.logInfo(s"Processing ${chunk.size} took ${Duration.fromInterval(start,finish).render}")
     yield ()
   }.ignore.provide(ZLayer.succeed(ds))
 
@@ -78,16 +80,25 @@ case class PersistentTweetRepo(createQueue: Queue[InsertRequest], ds: DataSource
       }
     }.provide(ZLayer.succeed(ds))
 
+  def worker: Task[Unit] = {
+    ZStream.fromQueue(createQueue)
+      .groupedWithin(1024, 20.milliseconds)
+      .mapZIOParUnordered(4)(createChunk)
+      .runDrain
+      .fork.unit
+//      .runForeach(createChunk(_).fork).fork.unit
+  }
+
 
 object PersistentTweetRepo:
   def layer: ZLayer[Any, Throwable, TweetRepo] = Quill.DataSource.fromPrefix("TweetApp") >>> ZLayer {
     for
       ds <- ZIO.service[DataSource]
       createQueue <- zio.Queue.bounded[InsertRequest](16384)
-      repo = PersistentTweetRepo(createQueue, ds)
-      _ <- zio.stream.ZStream.fromQueue(createQueue)
-        .groupedWithin(8192, 10.milliseconds)
-        .run(ZSink.foreach(repo.createChunk)).forkDaemon
+      clock <- ZIO.clock
+      repo = PersistentTweetRepo(createQueue, ds, clock)
+      _ <- repo.worker
+//      _ <- repo.worker
     yield repo
   }
 
@@ -102,7 +113,10 @@ object DBTestApp extends ZIOAppDefault:
 object DBTestCreateApp extends ZIOAppDefault:
   def run: ZIO[Environment with ZIOAppArgs with Scope,Any,Any] = (for
     repo <- ZIO.service[TweetRepo]
-    _ <- ZIO.foreachParDiscard(0 to 1000000)(i => repo.create("Hello, Tweeter " + i + "!")).withParallelism(16384)
+    s1 <- ZStream.fromIterable(0 to 500000).mapZIOParUnordered(8192)(i => repo.create("Hello, Tweeter " + 2*i + "!")).runDrain.fork
+    s2 <- ZStream.fromIterable(0 to 500000).mapZIOParUnordered(8192)(i => repo.create("Hello, Tweeter " + 2*i+1 + "!")).runDrain.fork
+    _ <- Fiber.awaitAll(Seq(s1, s2))
+//    _ <- ZIO.foreachParDiscard(0 to 1000000)(i => repo.create("Hello, Tweeter " + i + "!")).withParallelism(16384)
   yield ()).provide(
     TweetRepo.persistent,
   )
