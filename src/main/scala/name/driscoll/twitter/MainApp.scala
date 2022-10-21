@@ -2,20 +2,21 @@ package name.driscoll.twitter
 
 import name.driscoll.twitter.tweet.{TweetApp, TweetRepo}
 import name.driscoll.twitter.users.{PersistentUserRepo, UserApp}
-import zhttp.service.Server
+import zhttp.service.server.ServerChannelFactory
+import zhttp.service.{EventLoopGroup, Server}
 import zio.*
+
+import java.net.InetSocketAddress
 
 object MainApp extends ZIOAppDefault:
   def run: ZIO[Environment with ZIOAppArgs with Scope,Any,Any] = (for
     tweetRoutes <- ZIO.service[TweetApp]
-    server <- Server.start(
-      port = 8080,
-      http = tweetRoutes() ++ UserApp()
-    )
+    server <- ZIO.scoped {Server.make(
+      Server(tweetRoutes() ++ UserApp()).withBinding(new InetSocketAddress(8080))
+    ) *> ZIO.never}
   yield server).provide(
-      // An layer responsible for storing the state of the `counterApp`
-      ZLayer.fromZIO(Ref.make(0)),
-      
+    EventLoopGroup.uring(0),
+    ServerChannelFactory.uring,
       // To use the persistence layer, provide the `PersistentUserRepo.layer` layer instead
       PersistentUserRepo.layer ,
     TweetApp.layer,
