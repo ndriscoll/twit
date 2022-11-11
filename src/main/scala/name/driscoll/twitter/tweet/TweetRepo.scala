@@ -5,6 +5,7 @@ import zio.*
 
 trait TweetRepo:
   def create(body: String): Task[Long]
+  def createSlow(body: String): Task[Long]
 
   def lookup(id: String): Task[Option[Tweet]]
   

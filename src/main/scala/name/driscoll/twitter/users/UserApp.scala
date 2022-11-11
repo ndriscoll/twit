@@ -1,8 +1,11 @@
 package name.driscoll.twitter.users
 
-import zhttp.http.*
+import zio.http.*
 import zio.*
 import zio.json.*
+import zio.http.model.Method
+
+import zio.http.model.Status
 
 /**
  * An http app that: 

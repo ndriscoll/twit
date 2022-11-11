@@ -7,6 +7,8 @@ services:
     volumes:
       - ./docker/postgres/my-postgres.conf:/etc/postgresql.conf
       - ./docker/postgres/schema:/docker-entrypoint-initdb.d
+      - /nvmepool1/postgres:/var/lib/postgresql/data
+      - /nvmepool1/postgres-log:/var/lib/postgresql/data/pg_wal
     shm_size: 2048MB
     environment:
       POSTGRES_PASSWORD: password
